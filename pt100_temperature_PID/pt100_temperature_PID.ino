@@ -2,7 +2,6 @@
 #include <SPI.h>
 #include <Adafruit_MAX31865.h>
 #include <PID_v1.h>
-#include <Wire.h>
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
