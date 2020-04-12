@@ -214,7 +214,7 @@ void ROMwriteNode(String node, int pos) {
 void write_EEPROM(String x, int pos) {
   for (int n = pos; n < x.length() + pos; n++) {
     //write the ssid and password fetched from webpage to EEPROM
-    EEPROM.write(n, x[n - pos]);
+    EEPROM.update(n, x[n - pos]);
   }
 }
 
