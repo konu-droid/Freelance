@@ -45,7 +45,7 @@ int WindowSize = 5000;
 unsigned long windowStartTime;
 
 
-#define PWM_Pin 3
+#define Relay_Pin 3
 #define HotPin A3
 #define ColdPin A4
 #define BuzzerPin A5
@@ -81,7 +81,7 @@ void setup() {
 
 
   //__pinmode
-  pinMode(PWM_Pin, OUTPUT);
+  pinMode(Relay_Pin, OUTPUT);
   pinMode(HotPin, OUTPUT);
   pinMode(ColdPin, OUTPUT);
   pinMode(BuzzerPin, OUTPUT);
@@ -100,7 +100,7 @@ void setup() {
   digitalWrite(BuzzerPin, LOW);
   digitalWrite(up_key, HIGH);
   digitalWrite(down_key, HIGH);
-  analogWrite(PWM_Pin, 0);
+  analogWrite(Relay_Pin, 0);
 
   //LCD display
   lcd.begin(16, 2);
@@ -227,7 +227,7 @@ void loop() {
 
     digitalWrite(HotPin, HIGH);
     digitalWrite(ColdPin, LOW);
-    analogWrite(PWM_Pin, Output);
+    analogWrite(Relay_Pin, Output);
     Serial.print("Hot_PWM                               = ");
     Serial.println(Output);
   }
@@ -241,7 +241,7 @@ void loop() {
 
     digitalWrite(HotPin, LOW);
     digitalWrite(ColdPin, HIGH);
-    analogWrite(PWM_Pin, -1 * Output);
+    analogWrite(Relay_Pin, -1 * Output);
 
     Serial.print("Cold_PWM                               = ");
     Serial.println(Output);
