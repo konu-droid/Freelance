@@ -8,9 +8,6 @@
 //set offset here
 double offset = 0 ;
 
-#define PIN_INPUT 0
-#define RELAY_PIN 6
-
 
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(8, 9, 10, 11, 12, 13);
@@ -64,7 +61,7 @@ HX711 get_U;
 void setup() {
 
   windowStartTime = millis();
-  
+
   int i;
   long buf = 0;
   long U = 0;
@@ -100,7 +97,7 @@ void setup() {
   digitalWrite(BuzzerPin, LOW);
   digitalWrite(up_key, HIGH);
   digitalWrite(down_key, HIGH);
-  analogWrite(Relay_Pin, 0);
+  digitalWrite(Relay_Pin, LOW);
 
   //LCD display
   lcd.begin(16, 2);
@@ -216,35 +213,37 @@ void loop() {
   myPID.Compute();
 
   /************************************************
-   * turn the output pin on/off based on pid output
+     turn the output pin on/off based on pid output
    ************************************************/
   if (millis() - windowStartTime > WindowSize)
   { //time to shift the Relay Window
     windowStartTime += WindowSize;
   }
+  if (Output < millis() - windowStartTime) digitalWrite(Relay_Pin, HIGH);
+  else digitalWrite(Relay_Pin, LOW);
 
-  if (Output < millis() - windowStartTime)  {
+
+  if (Setpoint == T )  {
+
+    digitalWrite(HotPin, LOW);
+    digitalWrite(ColdPin, LOW);
+    Serial.print("OK");
+  }
+
+  else if (Setpoint - T > 0) {
 
     digitalWrite(HotPin, HIGH);
     digitalWrite(ColdPin, LOW);
-    analogWrite(Relay_Pin, Output);
-    Serial.print("Hot_PWM                               = ");
-    Serial.println(Output);
+    Serial.print("Hot_PIN");
+
   }
 
   else
   {
 
-    myPID.SetTunings(consKp, consKi, consKd);
-
-    myPID.Compute();
-
     digitalWrite(HotPin, LOW);
     digitalWrite(ColdPin, HIGH);
-    analogWrite(Relay_Pin, -1 * Output);
-
-    Serial.print("Cold_PWM                               = ");
-    Serial.println(Output);
+    Serial.print("Cold_PIN");
 
   }
 
@@ -254,6 +253,7 @@ void loop() {
       digitalWrite(BuzzerPin, HIGH);
       delay(Buzzer_on_time);
       Timer = Buzzer_on_time;
+      digitalWrite(BuzzerPin, LOW);
 
     }
   }
