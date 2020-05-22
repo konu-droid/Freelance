@@ -42,11 +42,6 @@ PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
 #define PWM_Pin 3
 #define HotPin A3
 #define ColdPin A4
-#define BuzzerPin A5
-
-int Timer = 0;
-int delay_mins = 5;                              // in minutes
-int Buzzer_on_time = 3000;                       // in milli seconds
 
 long Umess;
 float Rx;
@@ -79,7 +74,6 @@ void setup() {
   pinMode(PWM_Pin, OUTPUT);
   pinMode(HotPin, OUTPUT);
   pinMode(ColdPin, OUTPUT);
-  pinMode(BuzzerPin, OUTPUT);
   pinMode(up_key, INPUT);
   pinMode(down_key, INPUT);
   myPID.SetOutputLimits(-255, 255);
@@ -87,7 +81,6 @@ void setup() {
   // Initialize Pins
   digitalWrite(HotPin, LOW);
   digitalWrite(ColdPin, LOW);
-  digitalWrite(BuzzerPin, LOW);
   digitalWrite(up_key, HIGH);
   digitalWrite(down_key, HIGH);
   analogWrite(PWM_Pin, 0);
@@ -230,17 +223,6 @@ void loop() {
 
   }
 
-  if (( T - Setpoint == 0.1 ) || ( T - Setpoint == (-0.1) )) {
-    if ( Timer > delay_mins * 600 ) {
-
-      digitalWrite(BuzzerPin, HIGH);
-      delay(Buzzer_on_time);
-      Timer = Buzzer_on_time;
-
-    }
-  }
-
-  Timer++;
 
   Serial.print("Set point                                                = ");
   Serial.println(Setpoint);

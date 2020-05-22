@@ -2,6 +2,7 @@
 #include <PID_v1.h>
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
+#include "Adafruit_LiquidCrystal.h"
 #include "HX711.h"    //https://github.com/bogde/HX711
 
 
@@ -9,8 +10,8 @@
 double offset = 0 ;
 
 
-// initialize the library with the numbers of the interface pins
-LiquidCrystal lcd(8, 9, 10, 11, 12, 13);
+// Connect via i2c, default address #0 (A0-A2 not jumpered)
+Adafruit_LiquidCrystal lcd(0);
 char buf[17];
 
 
@@ -20,8 +21,8 @@ char buf[17];
 #define RMAX   250.0
 
 
-const int up_key = 6;
-const int down_key = 5;
+const int up_key = A2;
+const int down_key = A3;
 
 
 const long  Uu = 1834661;    // Raw reading lower end
@@ -33,7 +34,7 @@ const float Ro = 123.24;  // Upper end resistance value
 double Setpoint, Average, Output, T;
 int save_val;
 
-double consKp = 40 , consKi = 10.05, consKd = 10.25; //kpid 1,0.25,0.25 +-0.1
+double consKp = 1 , consKi = 0.05, consKd = 0.25; //kpid 1,0.25,0.25 +-0.1
 
 //Specify the links and initial tuning parameters
 PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
@@ -42,14 +43,9 @@ int WindowSize = 5000;
 unsigned long windowStartTime;
 
 
-#define Relay_Pin 3
-#define HotPin A3
-#define ColdPin A4
-#define BuzzerPin A5
-
-int Timer = 0;
-int delay_mins = 5;                              // in minutes
-int Buzzer_on_time = 3000;                       // in milli seconds
+#define Relay_Pin 9
+#define HotPin 6
+#define ColdPin 7
 
 long Umess;
 float Rx;
@@ -81,7 +77,6 @@ void setup() {
   pinMode(Relay_Pin, OUTPUT);
   pinMode(HotPin, OUTPUT);
   pinMode(ColdPin, OUTPUT);
-  pinMode(BuzzerPin, OUTPUT);
   pinMode(up_key, INPUT);
   pinMode(down_key, INPUT);
 
@@ -94,14 +89,14 @@ void setup() {
   // Initialize Pins
   digitalWrite(HotPin, LOW);
   digitalWrite(ColdPin, LOW);
-  digitalWrite(BuzzerPin, LOW);
   digitalWrite(up_key, HIGH);
   digitalWrite(down_key, HIGH);
   digitalWrite(Relay_Pin, LOW);
-
-  //LCD display
-  lcd.begin(16, 2);
+  
+   //LCD display
+  lcd.begin(20, 4);
   lcd.setCursor(0, 0); //Move coursor to second Line
+  lcd.setBacklight(HIGH);
   lcd.print("PID TEMP - 0.1 tested ");
   delay(100);
 
@@ -212,12 +207,15 @@ void loop() {
 
   myPID.Compute();
 
+  
+
   /************************************************
      turn the output pin on/off based on pid output
    ************************************************/
+   
   if (millis() - windowStartTime > WindowSize)
   { //time to shift the Relay Window
-    windowStartTime += WindowSize;
+    windowStartTime += (millis() - windowStartTime);
   }
   if (Output < millis() - windowStartTime) digitalWrite(Relay_Pin, HIGH);
   else digitalWrite(Relay_Pin, LOW);
@@ -247,26 +245,11 @@ void loop() {
 
   }
 
-  if (( T - Setpoint == 0.1 ) || ( T - Setpoint == (-0.1) )) {
-    if ( Timer > delay_mins * 600 ) {
-
-      digitalWrite(BuzzerPin, HIGH);
-      delay(Buzzer_on_time);
-      Timer = Buzzer_on_time;
-      digitalWrite(BuzzerPin, LOW);
-
-    }
-  }
-
-  Timer++;
-
   Serial.print("Set point                                                = ");
   Serial.println(Setpoint);
   save_val = Setpoint * 100;
   ROMwrite(String(save_val));
 
-
-  delay(500);
 }
 
 
