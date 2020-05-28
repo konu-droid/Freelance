@@ -31,7 +31,7 @@ const float Ru = 100.01;  // Resistance value lower end
 const float Ro = 123.24;  // Upper end resistance value
 
 //Define Variables to connect to
-double Setpoint, Average, Output, T;
+double Setpoint, Output, T;
 int save_val;
 
 double consKp = 1 , consKi = 0.05, consKd = 0.25; //kpid 1,0.25,0.25 +-0.1
@@ -39,8 +39,7 @@ double consKp = 1 , consKi = 0.05, consKd = 0.25; //kpid 1,0.25,0.25 +-0.1
 //Specify the links and initial tuning parameters
 PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
 
-int WindowSize = 5000;
-unsigned long windowStartTime;
+int WindowSize = 3000;
 
 
 #define Relay_Pin 9
@@ -55,8 +54,6 @@ HX711 get_U;
 
 
 void setup() {
-
-  windowStartTime = millis();
 
   int i;
   long buf = 0;
@@ -213,12 +210,10 @@ void loop() {
      turn the output pin on/off based on pid output
    ************************************************/
    
-  if (millis() - windowStartTime > WindowSize)
-  { //time to shift the Relay Window
-    windowStartTime += (millis() - windowStartTime);
-  }
-  if (Output < millis() - windowStartTime) digitalWrite(Relay_Pin, HIGH);
-  else digitalWrite(Relay_Pin, LOW);
+  digitalWrite(Relay_Pin,HIGH);
+  delay(Output);
+  digitalWrite(Relay_Pin,LOW);
+  delay(WindowSize - Output);
 
 
   if (Setpoint == T )  {

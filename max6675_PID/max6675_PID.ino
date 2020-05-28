@@ -21,7 +21,7 @@ LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
 const int up_key = A0;
 const int down_key = A1;
 
-#define PWM_Pin 13
+#define Relay_Pin 13
 
 // make a cute degree symbol
 uint8_t degree[8]  = {140, 146, 146, 140, 128, 128, 128, 128};
@@ -34,6 +34,8 @@ double consKp = 40 , consKi = 10.05, consKd = 10.25; //kpid 1,0.25,0.25 +-0.1
 
 //Specify the links and initial tuning parameters
 PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
+
+int WindowSize = 3000;
 
 void setup() {
   Serial.begin(9600);
@@ -54,15 +56,15 @@ void setup() {
   myPID.SetMode(AUTOMATIC);
 
   //__pinmode
-  pinMode(PWM_Pin, OUTPUT);
+  pinMode(Relay_Pin, OUTPUT);
   pinMode(up_key, INPUT);
   pinMode(down_key, INPUT);
-  myPID.SetOutputLimits(-255, 255);
+  myPID.SetOutputLimits(0,WindowSize);
 
   // Initialize Pins
   digitalWrite(up_key, HIGH);
   digitalWrite(down_key, HIGH);
-  digitalWrite(PWM_Pin, 0);
+  digitalWrite(Relay_Pin, 0);
 
   //LCD display
   lcd.begin(16, 2);
@@ -114,26 +116,14 @@ void loop() {
 
   myPID.Compute();
 
-  if (Output > 0)  {
-
-    analogWrite(PWM_Pin, Output);
-    Serial.print("Hot_PWM                               = ");
-    Serial.println(Output);
-  }
-
-  else
-  {
-
-    myPID.SetTunings(consKp, consKi, consKd);
-
-    myPID.Compute();
-    
-    analogWrite(PWM_Pin, -1 * Output);
-
-    Serial.print("Cold_PWM                               = ");
-    Serial.println(Output);
-
-  }
+    /************************************************
+     turn the output pin on/off based on pid output
+   ************************************************/
+   
+  digitalWrite(Relay_Pin,HIGH);
+  delay(Output);
+  digitalWrite(Relay_Pin,LOW);
+  delay(WindowSize - Output);
 
 
   Serial.print("Set point                                                = ");
