@@ -2,7 +2,6 @@
 #include <PID_v1.h>
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
-#include "Adafruit_LiquidCrystal.h"
 #include "HX711.h"    //https://github.com/bogde/HX711
 
 
@@ -11,7 +10,8 @@ double offset = 0 ;
 
 
 // Connect via i2c, default address #0 (A0-A2 not jumpered)
-Adafruit_LiquidCrystal lcd(0);
+const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 char buf[17];
 
 
@@ -34,17 +34,19 @@ const float Ro = 123.24;  // Upper end resistance value
 double Setpoint, Output, T;
 int save_val;
 
+unsigned long timeTaken = 0;
+unsigned long startTime = 0;
+
 double consKp = 1 , consKi = 0.05, consKd = 0.25; //kpid 1,0.25,0.25 +-0.1
 
 //Specify the links and initial tuning parameters
 PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
 
-int WindowSize = 3000;
+int windowSize = 1000;
 
 
 #define Relay_Pin 9
 #define HotPin 6
-#define ColdPin 7
 
 long Umess;
 float Rx;
@@ -73,27 +75,24 @@ void setup() {
   //__pinmode
   pinMode(Relay_Pin, OUTPUT);
   pinMode(HotPin, OUTPUT);
-  pinMode(ColdPin, OUTPUT);
   pinMode(up_key, INPUT);
   pinMode(down_key, INPUT);
 
   //tell the PID to range between 0 and the full window size
-  myPID.SetOutputLimits(0, WindowSize);
+  myPID.SetOutputLimits(-1000, windowSize);
 
   //turn the PID on
   myPID.SetMode(AUTOMATIC);
 
   // Initialize Pins
   digitalWrite(HotPin, LOW);
-  digitalWrite(ColdPin, LOW);
   digitalWrite(up_key, HIGH);
   digitalWrite(down_key, HIGH);
   digitalWrite(Relay_Pin, LOW);
-  
-   //LCD display
+
+  //LCD display
   lcd.begin(20, 4);
   lcd.setCursor(0, 0); //Move coursor to second Line
-  lcd.setBacklight(HIGH);
   lcd.print("PID TEMP - 0.1 tested ");
   delay(100);
 
@@ -202,43 +201,52 @@ void loop() {
 
   myPID.SetTunings(consKp, consKi, consKd);
 
-  myPID.Compute();
 
-  
 
   /************************************************
      turn the output pin on/off based on pid output
    ************************************************/
-   
-  digitalWrite(Relay_Pin,HIGH);
-  delay(Output);
-  digitalWrite(Relay_Pin,LOW);
-  delay(WindowSize - Output);
 
+  timeTaken = millis();
 
-  if (Setpoint == T )  {
-
-    digitalWrite(HotPin, LOW);
-    digitalWrite(ColdPin, LOW);
-    Serial.print("OK");
+  if (timeTaken - startTime > windowSize) {
+    myPID.Compute();
+    startTime = millis();
   }
 
-  else if (Setpoint - T > 0) {
 
-    digitalWrite(HotPin, HIGH);
-    digitalWrite(ColdPin, LOW);
-    Serial.print("Hot_PIN");
+  if (timeTaken - startTime < Output) digitalWrite(Relay_Pin, HIGH);
 
-  }
+  else digitalWrite(Relay_Pin, LOW);
 
-  else
-  {
+  digitalWrite(HotPin, HIGH);
+  Serial.print("relay value        = ");
+  Serial.println(Output);
 
-    digitalWrite(HotPin, LOW);
-    digitalWrite(ColdPin, HIGH);
-    Serial.print("Cold_PIN");
+  /*
 
-  }
+    if (Setpoint == T )  {
+
+      digitalWrite(HotPin, LOW);
+      Serial.print("OK");
+    }
+
+    else if (Setpoint - T > 0) {
+
+      digitalWrite(HotPin, HIGH);
+      Serial.print("Hot_PIN");
+
+    }
+
+    else
+    {
+
+      digitalWrite(HotPin, LOW);
+      Serial.print("Cold");
+
+    }
+
+  */
 
   Serial.print("Set point                                                = ");
   Serial.println(Setpoint);
