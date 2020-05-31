@@ -10,7 +10,7 @@ double offset = 0 ;
 
 
 // Connect via i2c, default address #0 (A0-A2 not jumpered)
-const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
+const int rs = 7, en = 8, d4 = 9, d5 = 10, d6 = 11, d7 = 12;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 char buf[17];
 
@@ -21,14 +21,14 @@ char buf[17];
 #define RMAX   250.0
 
 
-const int up_key = A2;
-const int down_key = A3;
+const int up_key = 5;
+const int down_key = 4;
 
 
-const long  Uu = 1834661;    // Raw reading lower end
-const long  Uo = 2205459;    // Raw upper end reading
-const float Ru = 100.01;  // Resistance value lower end
-const float Ro = 123.24;  // Upper end resistance value
+const long Uu = 2341211; // Raw reading lower end422 -40
+const long Uo = 5730094; // Raw upper end reading682 +300
+const float Ru = 84.27; // Resistance value lower end
+const float Ro = 212.01; // Upper end resistance value.0188
 
 //Define Variables to connect to
 double Setpoint, Output, T;
@@ -37,16 +37,16 @@ int save_val;
 unsigned long timeTaken = 0;
 unsigned long startTime = 0;
 
-double consKp = 1 , consKi = 0.05, consKd = 0.25; //kpid 1,0.25,0.25 +-0.1
+double consKp = 1 , consKi = 5, consKd = 1; //kpid 1,0.25,0.25 +-0.1//Kp=2, Ki=5, Kd=1;now  2,0.01,1
 
 //Specify the links and initial tuning parameters
 PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
 
-int windowSize = 1000;
+int windowSize = 100;//900,1500,500
 
 
-#define Relay_Pin 9
-#define HotPin 6
+#define Relay_Pin 6
+#define HotPin 3
 
 long Umess;
 float Rx;
@@ -79,7 +79,7 @@ void setup() {
   pinMode(down_key, INPUT);
 
   //tell the PID to range between 0 and the full window size
-  myPID.SetOutputLimits(-1000, windowSize);
+  myPID.SetOutputLimits(-10000, windowSize);//-10000,-9000
 
   //turn the PID on
   myPID.SetMode(AUTOMATIC);
@@ -93,8 +93,8 @@ void setup() {
   //LCD display
   lcd.begin(20, 4);
   lcd.setCursor(0, 0); //Move coursor to second Line
-  lcd.print("PID TEMP - 0.1 tested ");
-  delay(100);
+  lcd.print("PID-TEMP-0.2");
+  delay(1000);
 
 
 }
@@ -175,7 +175,7 @@ void loop() {
   lcd.setCursor(0, 0);
   lcd.print("Temp  = ");
   lcd.setCursor(9, 0);
-  lcd.print(T, 1);
+  lcd.print(T, 2);
   lcd.print(" C");
 
   lcd.setCursor(0, 1);
@@ -210,6 +210,20 @@ void loop() {
   timeTaken = millis();
 
   if (timeTaken - startTime > windowSize) {
+
+    double hold=0;
+
+    hold = Setpoint - t;
+
+    if ( hold > 0 ) {
+      
+      if(hold < 1) windowSize = 100;
+      else if(hold > 10) windowSize = 1500;
+      else windowSize = map(hold,1,10,100,1500);
+      myPID.SetOutputLimits(-10000, windowSize);
+      
+    }
+    
     myPID.Compute();
     startTime = millis();
   }
