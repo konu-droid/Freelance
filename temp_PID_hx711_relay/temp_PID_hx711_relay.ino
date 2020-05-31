@@ -54,6 +54,10 @@ float Rx;
 
 HX711 get_U;
 
+// edit these valuee to change the adjustability of the windowSize
+int min_windowSize = 100;
+int max_windowSize = 1500;
+
 
 void setup() {
 
@@ -213,13 +217,13 @@ void loop() {
 
     double hold=0;
 
-    hold = Setpoint - t;
+    hold = Setpoint - T;
 
     if ( hold > 0 ) {
       
-      if(hold < 1) windowSize = 100;
-      else if(hold > 10) windowSize = 1500;
-      else windowSize = map(hold,1,10,100,1500);
+      if(hold < 1) windowSize = min_windowSize;
+      else if(hold > 5) windowSize = max_windowSize;
+      else windowSize = map(hold,1,5,max_windowSize,min_windowSize);
       myPID.SetOutputLimits(-10000, windowSize);
       
     }
