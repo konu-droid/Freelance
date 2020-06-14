@@ -5,43 +5,43 @@
 #include "HX711.h"    //https://github.com/bogde/HX711
 
 
+
 //set offset here
 double offset = 0 ;
 
 
 // initialize the library with the numbers of the interface pins
-LiquidCrystal lcd(8, 9, 10, 11, 12, 13);
+LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
 char buf[17];
 
 
-#define UMIN  900000
+#define UMIN 900000
 #define UMAX 8000000
-#define RMIN    60.0
-#define RMAX   250.0
+#define RMIN 60.0
+#define RMAX 250.0
 
 
-const int up_key = 6;
-const int down_key = 5;
+const int up_key = 5;
+const int down_key = 4;
 
 
-const long  Uu = 1834661;    // Raw reading lower end
-const long  Uo = 2205459;    // Raw upper end reading
-const float Ru = 100.01;  // Resistance value lower end
-const float Ro = 123.24;  // Upper end resistance value
+const long Uu = 2341211; // Raw reading lower end422 -40
+const long Uo = 5730094; // Raw upper end reading682 +300
+const float Ru = 84.27; // Resistance value lower end
+const float Ro = 212.01; // Upper end resistance value.0188
 
 //Define Variables to connect to
 double Setpoint, Average, Output, T;
-int save_val;
 
-double consKp = 40 , consKi = 10.05, consKd = 10.25; //kpid 1,0.25,0.25 +-0.1
-
+double consKp = 1 , consKi = 0.02, consKd = 0.10; //1,0.05,0.10
 //Specify the links and initial tuning parameters
 PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
 
 
-#define PWM_Pin 3
-#define HotPin A3
-#define ColdPin A4
+#define PWM_Pin 6
+#define HotPin 3
+#define ColdPin 2
+
 
 long Umess;
 float Rx;
@@ -58,10 +58,9 @@ void setup() {
 
   Serial.begin(115200);
 
-  save_val =  read_string(100, 0).toInt();
-  Setpoint = save_val / 100; // in ºC
+  EEPROM.get(1, Setpoint);
   Serial.print("EEPROM Value");
-  Serial.println(Setpoint   );
+  Serial.println(Setpoint );
 
   Serial.println(F("HX711 Temperature measurement with Pt100 resistance thermometer"));
   get_U.begin(A1, A0, 32);
@@ -86,9 +85,9 @@ void setup() {
   analogWrite(PWM_Pin, 0);
 
   //LCD display
-  lcd.begin(16, 2);
+  lcd.begin(20, 4);
   lcd.setCursor(0, 0); //Move coursor to second Line
-  lcd.print("PID TEMP - 0.1 tested ");
+  lcd.print("PID TEMP - 0.2");
   delay(100);
 
 
@@ -104,17 +103,17 @@ void loop() {
   // Calculate the resistance Rx from the measured voltage
   if (Umess >= UMIN && Umess <= UMAX) {
     Rx = ((((Ro - Ru) / (Uo - Uu)) * (Umess - Uu)) + Ru );
-    //Serial.print("Umess = "); Serial.print(Umess); Serial.print("  ");
+    //Serial.print("Umess = "); Serial.print(Umess); Serial.print(" ");
     Serial.print("R = ");
     Serial.print(Rx, 3);
-    Serial.print(" Ohm   ->   ");
+    Serial.print(" Ohm -> ");
 
-    lcd.setCursor(9, 0);
+    lcd.setCursor(9, 2);
     lcd.print(Rx, 2);
     lcd.print("Ohm");
 
     // Calculate the temperature for Rx> = 100 Ohm
-    if (Rx >= 100.0) {
+    if (Rx >= 80.0) {
 
       k1 = 3.90802 * pow(10, -1);
       k2 = 2 * 5.802 * pow(10, -5);
@@ -149,7 +148,7 @@ void loop() {
     }
 
     Serial.print("T = ");
-    Serial.print(T, 3);
+    Serial.print(T, 2);
     Serial.println("C");
 
   }
@@ -168,10 +167,14 @@ void loop() {
 
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Temp  = ");
+  lcd.print("Temp = ");
   lcd.setCursor(9, 0);
-  lcd.print(T, 1);
-  lcd.print(" C");
+  lcd.print(T, 2);
+  lcd.print("  C");
+  lcd.setCursor(0, 3);
+  lcd.print("R = ");
+  lcd.print(Rx, 3);
+  lcd.print(" Ohm -> ");
 
   lcd.setCursor(0, 1);
   lcd.print("Set Pt = ");
@@ -188,7 +191,7 @@ void loop() {
   }
   if (digitalRead(up_key) == LOW)
   {
-    if (Setpoint < 60)
+    if (Setpoint < 80)
     {
       Setpoint += 0.1;
     }
@@ -198,12 +201,12 @@ void loop() {
 
   myPID.Compute();
 
-  if (Output > 0)  {
+  if (Output > 0) {
 
     digitalWrite(HotPin, HIGH);
     digitalWrite(ColdPin, LOW);
     analogWrite(PWM_Pin, Output);
-    Serial.print("Hot_PWM                               = ");
+    Serial.print("Hot_PWM = ");
     Serial.println(Output);
   }
 
@@ -218,16 +221,15 @@ void loop() {
     digitalWrite(ColdPin, HIGH);
     analogWrite(PWM_Pin, -1 * Output);
 
-    Serial.print("Cold_PWM                               = ");
+    Serial.print("Cold_PWM = ");
     Serial.println(Output);
 
   }
 
-
-  Serial.print("Set point                                                = ");
+  Serial.print("Set point = ");
   Serial.println(Setpoint);
-  save_val = Setpoint * 100;
-  ROMwrite(String(save_val));
+
+  EEPROM.put(1, Setpoint);
 
 
   delay(500);
@@ -246,41 +248,4 @@ char *ftoa(char *a, double f, int precision)
   long desimal = abs((long)((f - heiltal) * p[precision]));
   itoa(desimal, a, 10);
   return ret;
-}
-
-//----------Write to ROM-----------//
-void ROMwrite(String temp) {
-  temp += ";";
-  write_EEPROM(temp, 0);
-  //EEPROM.commit();
-}
-
-void ROMwriteNode(String node, int pos) {
-  node += ";";
-  write_EEPROM(node, pos);
-  //EEPROM.commit();
-}
-
-
-//****Write to ROM***//
-void write_EEPROM(String x, int pos) {
-  for (int n = pos; n < x.length() + pos; n++) {
-    //write the ssid and password fetched from webpage to EEPROM
-    EEPROM.write(n, x[n - pos]);
-  }
-}
-
-
-//*********EEPROM Read*********//
-String read_string(int l, int p) {
-  String temp;
-  for (int n = p; n < l + p; ++n)
-  {
-    // read the saved password from EEPROM
-    if (char(EEPROM.read(n)) != ';') {
-
-      temp += String(char(EEPROM.read(n)));
-    } else n = l + p;
-  }
-  return temp;
 }

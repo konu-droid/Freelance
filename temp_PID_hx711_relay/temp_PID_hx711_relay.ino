@@ -32,17 +32,15 @@ const float Ro = 212.01; // Upper end resistance value.0188
 
 //Define Variables to connect to
 double Setpoint, Output, T;
-int save_val;
 
 unsigned long timeTaken = 0;
 unsigned long startTime = 0;
 
-double consKp = 1 , consKi = 5, consKd = 1; //kpid 1,0.25,0.25 +-0.1//Kp=2, Ki=5, Kd=1;now  2,0.01,1
+double consKp = 2, consKi = 1, consKd =  35; //kpid 1,0.25,0.25 +-0.1//Kp=2, Ki=5, Kd=1;now  2,0.01,1    0.5, 0.01,20,  0.5, 0.01,2   1, 0.01,2 in oven 0.5,0.01,10 ,0.5,0.01,6  2510,2140
 
 //Specify the links and initial tuning parameters
 PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
-
-int windowSize = 100;//900,1500,500
+int windowSize = 200;//900,1500,500,200
 
 
 #define Relay_Pin 6
@@ -54,10 +52,6 @@ float Rx;
 
 HX711 get_U;
 
-// edit these valuee to change the adjustability of the windowSize
-int min_windowSize = 100;
-int max_windowSize = 1500;
-
 
 void setup() {
 
@@ -67,8 +61,7 @@ void setup() {
 
   Serial.begin(115200);
 
-  save_val =  read_string(100, 0).toInt();
-  Setpoint = save_val / 100; // in ºC
+  EEPROM.get(1, Setpoint);
   Serial.print("EEPROM Value");
   Serial.println(Setpoint   );
 
@@ -83,7 +76,7 @@ void setup() {
   pinMode(down_key, INPUT);
 
   //tell the PID to range between 0 and the full window size
-  myPID.SetOutputLimits(-10000, windowSize);//-10000,-9000
+  myPID.SetOutputLimits(0,windowSize);//-10000,-9000(-10000, windowSize)
 
   //turn the PID on
   myPID.SetMode(AUTOMATIC);
@@ -98,7 +91,7 @@ void setup() {
   lcd.begin(20, 4);
   lcd.setCursor(0, 0); //Move coursor to second Line
   lcd.print("PID-TEMP-0.2");
-  delay(1000);
+  delay(100);
 
 
 }
@@ -158,7 +151,7 @@ void loop() {
     }
 
     Serial.print("T = ");
-    Serial.print(T, 3);
+    Serial.print(T, 2);
     Serial.println("C");
 
   }
@@ -197,7 +190,7 @@ void loop() {
   }
   if (digitalRead(up_key) == LOW)
   {
-    if (Setpoint < 60)
+    if (Setpoint < 70)
     {
       Setpoint += 0.1;
     }
@@ -214,20 +207,6 @@ void loop() {
   timeTaken = millis();
 
   if (timeTaken - startTime > windowSize) {
-
-    double hold=0;
-
-    hold = Setpoint - T;
-
-    if ( hold > 0 ) {
-      
-      if(hold < 1) windowSize = min_windowSize;
-      else if(hold > 5) windowSize = max_windowSize;
-      else windowSize = map(hold,1,5,max_windowSize,min_windowSize);
-      myPID.SetOutputLimits(-10000, windowSize);
-      
-    }
-    
     myPID.Compute();
     startTime = millis();
   }
@@ -268,8 +247,7 @@ void loop() {
 
   Serial.print("Set point                                                = ");
   Serial.println(Setpoint);
-  save_val = Setpoint * 100;
-  ROMwrite(String(save_val));
+  EEPROM.put(1,Setpoint);
 
 }
 
@@ -286,41 +264,4 @@ char *ftoa(char *a, double f, int precision)
   long desimal = abs((long)((f - heiltal) * p[precision]));
   itoa(desimal, a, 10);
   return ret;
-}
-
-//----------Write to ROM-----------//
-void ROMwrite(String temp) {
-  temp += ";";
-  write_EEPROM(temp, 0);
-  //EEPROM.commit();
-}
-
-void ROMwriteNode(String node, int pos) {
-  node += ";";
-  write_EEPROM(node, pos);
-  //EEPROM.commit();
-}
-
-
-//****Write to ROM***//
-void write_EEPROM(String x, int pos) {
-  for (int n = pos; n < x.length() + pos; n++) {
-    //write the ssid and password fetched from webpage to EEPROM
-    EEPROM.write(n, x[n - pos]);
-  }
-}
-
-
-//*********EEPROM Read*********//
-String read_string(int l, int p) {
-  String temp;
-  for (int n = p; n < l + p; ++n)
-  {
-    // read the saved password from EEPROM
-    if (char(EEPROM.read(n)) != ';') {
-
-      temp += String(char(EEPROM.read(n)));
-    } else n = l + p;
-  }
-  return temp;
 }
