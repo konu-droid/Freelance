@@ -42,6 +42,11 @@ PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
 #define HotPin 3
 #define ColdPin 2
 
+unsigned long timeTaken = 0;
+unsigned long tempTime = 0;
+
+//temp read delay
+int temp_read_delay = 500;
 
 long Umess;
 float Rx;
@@ -96,6 +101,10 @@ void setup() {
 void loop() {
 
   float k1, k2, k3, k4, k5, k6, k7, k8, k9;
+
+  timeTaken = millis();
+
+  if(timeTaken - tempTime > temp_read_delay){
 
   //Read in the measured value for the voltage at Rx
   Umess = get_U.read();
@@ -158,6 +167,10 @@ void loop() {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Error");
+  }
+
+  tempTime = timeTaken;
+  
   }
 
   // ==========================****=========================

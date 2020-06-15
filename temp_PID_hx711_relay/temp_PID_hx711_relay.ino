@@ -35,16 +35,21 @@ double Setpoint, Output, T;
 
 unsigned long timeTaken = 0;
 unsigned long startTime = 0;
+unsigned long tempTime = 0;
 
 double consKp = 2, consKi = 1, consKd =  35; //kpid 1,0.25,0.25 +-0.1//Kp=2, Ki=5, Kd=1;now  2,0.01,1    0.5, 0.01,20,  0.5, 0.01,2   1, 0.01,2 in oven 0.5,0.01,10 ,0.5,0.01,6  2510,2140
 
 //Specify the links and initial tuning parameters
 PID myPID(&T, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
+
 int windowSize = 200;//900,1500,500,200
 
+//temp read delay
+int temp_read_delay = 500;
 
 #define Relay_Pin 6
 #define HotPin 3
+#define coldPin 2
 
 long Umess;
 float Rx;
@@ -72,11 +77,12 @@ void setup() {
   //__pinmode
   pinMode(Relay_Pin, OUTPUT);
   pinMode(HotPin, OUTPUT);
+  pinMode(coldPin, OUTPUT);
   pinMode(up_key, INPUT);
   pinMode(down_key, INPUT);
 
   //tell the PID to range between 0 and the full window size
-  myPID.SetOutputLimits(0,windowSize);//-10000,-9000(-10000, windowSize)
+  myPID.SetOutputLimits(0, windowSize); //-10000,-9000(-10000, windowSize)
 
   //turn the PID on
   myPID.SetMode(AUTOMATIC);
@@ -100,67 +106,74 @@ void loop() {
 
   float k1, k2, k3, k4, k5, k6, k7, k8, k9;
 
-  //Read in the measured value for the voltage at Rx
-  Umess = get_U.read();
+  timeTaken = millis();
 
-  // Calculate the resistance Rx from the measured voltage
-  if (Umess >= UMIN && Umess <= UMAX) {
-    Rx = ((((Ro - Ru) / (Uo - Uu)) * (Umess - Uu)) + Ru );
-    //Serial.print("Umess = "); Serial.print(Umess); Serial.print("  ");
-    Serial.print("R = ");
-    Serial.print(Rx, 3);
-    Serial.print(" Ohm   ->   ");
+  if (timeTaken - tempTime > temp_read_delay) {
 
-    lcd.setCursor(9, 0);
-    lcd.print(Rx, 2);
-    lcd.print("Ohm");
+    //Read in the measured value for the voltage at Rx
+    Umess = get_U.read();
 
-    // Calculate the temperature for Rx> = 100 Ohm
-    if (Rx >= 100.0) {
+    // Calculate the resistance Rx from the measured voltage
+    if (Umess >= UMIN && Umess <= UMAX) {
+      Rx = ((((Ro - Ru) / (Uo - Uu)) * (Umess - Uu)) + Ru );
+      //Serial.print("Umess = "); Serial.print(Umess); Serial.print("  ");
+      Serial.print("R = ");
+      Serial.print(Rx, 3);
+      Serial.print(" Ohm   ->   ");
 
-      k1 = 3.90802 * pow(10, -1);
-      k2 = 2 * 5.802 * pow(10, -5);
-      k3 = pow(3.90802 * pow(10, -1), 2);
-      k4 = 4.0 * (pow(5.802 * pow(10, -5), 2));
-      k5 = Rx - 100.0;
-      k6 = 5.802 * pow(10, -5);
+      lcd.setCursor(9, 0);
+      lcd.print(Rx, 2);
+      lcd.print("Ohm");
 
-      k7 = k1 / k2;
-      k8 = (k3 / k4) - (k5 / k6);
-      k9 = sqrt(k8);
+      // Calculate the temperature for Rx> = 100 Ohm
+      if (Rx >= 100.0) {
 
-      T = k7 - k9;
+        k1 = 3.90802 * pow(10, -1);
+        k2 = 2 * 5.802 * pow(10, -5);
+        k3 = pow(3.90802 * pow(10, -1), 2);
+        k4 = 4.0 * (pow(5.802 * pow(10, -5), 2));
+        k5 = Rx - 100.0;
+        k6 = 5.802 * pow(10, -5);
 
-      T = (-4 * sqrt(-57750000 * Rx + 43956550801) + 781604) / 231;
+        k7 = k1 / k2;
+        k8 = (k3 / k4) - (k5 / k6);
+        k9 = sqrt(k8);
+
+        T = k7 - k9;
+
+        T = (-4 * sqrt(-57750000 * Rx + 43956550801) + 781604) / 231;
+
+      }
+
+      // Calculate the temperature for Rx <100 Ohm
+      else {
+
+        k1 = pow (Rx, 5) * 1.597 * pow(10, -10);
+        k2 = pow (Rx, 4) * 2.951 * pow(10, -8);
+        k3 = pow (Rx, 3) * 4.784 * pow(10, -6);
+        k4 = pow (Rx, 2) * 2.613 * pow(10, -3);
+        k5 = 2.219 * Rx - 241.9;
+
+        T = k1 - k2 - k3 + k4 + k5;
+
+        T = (4 * sqrt(-57750000 * Rx + 43956550801) + 781604) / 231;
+
+      }
+
+      Serial.print("T = ");
+      Serial.print(T, 2);
+      Serial.println("C");
 
     }
 
-    // Calculate the temperature for Rx <100 Ohm
     else {
-
-      k1 = pow (Rx, 5) * 1.597 * pow(10, -10);
-      k2 = pow (Rx, 4) * 2.951 * pow(10, -8);
-      k3 = pow (Rx, 3) * 4.784 * pow(10, -6);
-      k4 = pow (Rx, 2) * 2.613 * pow(10, -3);
-      k5 = 2.219 * Rx - 241.9;
-
-      T = k1 - k2 - k3 + k4 + k5;
-
-      T = (4 * sqrt(-57750000 * Rx + 43956550801) + 781604) / 231;
-
+      Serial.println("Measurement error");
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Error");
     }
 
-    Serial.print("T = ");
-    Serial.print(T, 2);
-    Serial.println("C");
-
-  }
-
-  else {
-    Serial.println("Measurement error");
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Error");
+    tempTime = timeTaken;
   }
 
   // ==========================****=========================
@@ -211,10 +224,16 @@ void loop() {
     startTime = millis();
   }
 
+  bool set;
+  if ( T - Setpoint <= 0 ) set = 0;
+  else if ( T - Setpoint > 0.5 ) set = 1;
 
+  if (set == 1) digitalWrite(coldPin, HIGH);
+  else digitalWrite(coldPin, LOW);
+  
   if (timeTaken - startTime < Output) digitalWrite(Relay_Pin, HIGH);
-
   else digitalWrite(Relay_Pin, LOW);
+
 
   digitalWrite(HotPin, HIGH);
   Serial.print("relay value        = ");
@@ -247,7 +266,7 @@ void loop() {
 
   Serial.print("Set point                                                = ");
   Serial.println(Setpoint);
-  EEPROM.put(1,Setpoint);
+  EEPROM.put(1, Setpoint);
 
 }
 
