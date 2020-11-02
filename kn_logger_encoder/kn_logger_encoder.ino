@@ -3,98 +3,83 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <RTClib.h>
-#include <LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h>
 #include <HX711.h>
-#include <Adafruit_ADS1015.h>
+LiquidCrystal_I2C lcd(0x27, 20, 4);
 
-Adafruit_ADS1115 ads;
+
+HX711 scale(A0, A1);    // parameter "gain" is ommited; the default value 128 is used by the library
 
 RTC_DS3231 rtc;
 
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
 //these pins can not be changed 2/3 are special pins
 int encoderPin1 = 2;
 int encoderPin2 = 3;
 
-volatile int lastEncoded = 0;
+volatile int lastEncoded = 0, saveToSD = 0;
 volatile long encoderValue = 0;
-volatile double newencoderValue = 0;
+volatile double newencoderValue = 0, newencoderValueMAX = 0, lastnewencoderValue = 0, lastnewencoderValue2 = 0;
 volatile double offset = 0;
 
-long lastencoderValue = 0;
+volatile float kn = 0, max_kn = 0, lastkn = 0, lastkn2 = 0, knM[13];
 
-float wei;
-int16_t adc0 = 0;
+const int otp = 4;
+const int btn = 5;// START KEY
+const int otp2 = 7;//buzzer
 
-int lastMSB = 0;
-int lastLSB = 0;
-
-const int rs = 10;//10
-const int en = 9;//9
-const int d4 = 8;//8
-const int d5 = 7;//7
-const int d6 = 6;//6
-const int d7 = 5;//2
-const int mode_switch = 1;
-
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 const int out = A0;
 const int clck = A1;
 const int Tare = A2;
-HX711 scale(out, clck);
-float CalibrationFactor = -17230 ;  // Replace -12000 the calibration factor.
+const int btn2 = 6;
+
+float CalibrationFactor = -436 ;  // CALIBRATED-441,,, now -435
 
 File logger;
-
-#define time_button A3
-
-/*
-   for arduino uno
-  SD card attached to SPI bus as follows:
- ** MOSI - pin 11
- ** MISO - pin 12
- ** CLK - pin 13
- ** CS - pin 10 (for MKRZero SD: SDCARD_SS_PIN)
-
-   for arduino mega
-  SD card attached to SPI bus as follows:
- ** MOSI - pin 51
- ** MISO - pin 50
- ** CLK - pin 52
- ** CS - pin 53 (for MKRZero SD: SDCARD_SS_PIN)
-*/
 
 // make the value 53 if u want to use it on arduino mega else 10 for uno
 int pinCS = 10;
 
 //edit this to increase datalogging speed in sd card
-int interval = 1; //in seconds
+int interval = 0.02; //in seconds
+long timePassed = 0, timePassed2 = 0 ;
+#define max_kn_button A3
 
-int w = interval * 1; // 2 is previous value
+float offset2 = 117.8;             //113.4edit this for hx711
+uint8_t action = 0, action1 = 0, action2 = 0;
 
 void setup()
 {
   Serial.begin(9600);
-  lcd.begin(16, 2);
-  pinMode(time_button, INPUT_PULLUP);
-  pinMode(mode_switch, INPUT_PULLUP);
+  pinMode(otp2, OUTPUT);
+  digitalWrite(otp2, LOW);
+  pinMode(max_kn_button, INPUT);
+  digitalWrite(max_kn_button, HIGH);
+  pinMode(btn, INPUT);
+  digitalWrite(btn, HIGH);
+  pinMode(otp, OUTPUT);
+  digitalWrite(otp, LOW);
+
   rtc.begin(); // Initialize the rtc object
   pinMode(Tare, INPUT);
   digitalWrite(Tare, HIGH);
+
+  lcd.init();
+  lcd.backlight();
   lcd.setCursor(0, 0);
-  lcd.print("  RELAXATION");
+  lcd.print(" ok--- ");
   lcd.setCursor(0, 1);
-  lcd.print("    Machine");
-  delay(300); // wait for console opening
+  lcd.print(" t01 ");
+  delay(1000); // wait for console opening
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(" MADE BY ");
   lcd.setCursor(0, 1);
   lcd.print(" GAGAN");
-  delay(100); // wait for console opening
+  delay(200); // wait for console opening
   lcd.clear();
- 
+
 
   pinMode(encoderPin1, INPUT);
   pinMode(encoderPin2, INPUT);
@@ -115,44 +100,26 @@ void setup()
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     // This line sets the RTC with an explicit date & time, for example to set
     // January 21, 2014 at 3am you would call:
-    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
+    //   rtc.adjust(DateTime(2020, 5, 1, 13, 4, 0));
   }
 
   Serial.print("Initializing SD card...");
+  if (!SD.begin(10)) {
+    Serial.println("initialization failed!");
+    while (1);
+  }
 
-
-  Serial.println("initialization done.");
-
+  Serial.println("Initialization done.");
+  delay(1000);
   pinMode(pinCS, OUTPUT);
   DateTime now = rtc.now();
 
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Current Time:");
-  lcd.setCursor(0, 1);
-  lcd.print(now.hour(), DEC);
-  lcd.print(':');
-  lcd.print(now.minute(), DEC);
-  lcd.print(':');
-  lcd.print(now.second(), DEC);
-  delay(200);
-  lcd.setCursor(0, 0);
-  lcd.print("Current Date:");
-  lcd.setCursor(0, 1);
-  lcd.print(now.year(), DEC);
-  lcd.print('/');
-  lcd.print(now.month(), DEC);
-  lcd.print('/');
-  lcd.print(now.day(), DEC);
-  lcd.print(" (");
-  lcd.print(daysOfTheWeek[now.dayOfTheWeek()]);
-  lcd.print(") ");
-  delay(200);
+
 
   logger = SD.open("KN_log.txt", FILE_WRITE);
   if (logger) {
 
-    logger.println("Date,Time,Weight,Displacement");
+    logger.println("Date  ,Time  ,LOAD(N ),YIELD LOAD(N),BREAKING LOAD(N),Displacement(mm),YIELD Disp(mm),BREAKING Disp (mm)");
     logger.close(); // close the file
   }
   else {
@@ -161,92 +128,150 @@ void setup()
 
   lcd.clear();
   scale.set_scale(CalibrationFactor);
-  scale.tare();
+  // scale.tare();
 
-  ads.begin();
+  //    ads.begin();
+  for (int i = 0; i < 13; i++) {
+    knM[i] = 0;
+  }
 }
+
+
+
+
 void loop()
 {
   DateTime now = rtc.now();
-  if (digitalRead(time_button) == LOW) {
-    delay(20);
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Current Time:");
-    lcd.setCursor(0, 1);
-    lcd.print(now.hour(), DEC);
-    lcd.print(':');
-    lcd.print(now.minute(), DEC);
-    lcd.print(':');
-    lcd.print(now.second(), DEC);
-    lcd.setCursor(0, 2);
-    lcd.print("Current Date:");
-    lcd.setCursor(0, 3);
-    lcd.print(now.year(), DEC);
-    lcd.print('/');
-    lcd.print(now.month(), DEC);
-    lcd.print('/');
-    lcd.print(now.day(), DEC);
-    lcd.print(" (");
-    lcd.print(daysOfTheWeek[now.dayOfTheWeek()]);
-    lcd.print(") ");
-    delay(300);
-    lcd.clear();
-  }
+  newencoderValue = (double)encoderValue;
+  newencoderValue = (newencoderValue / 36.10)  ; //17.4
 
-  if (digitalRead(mode_switch) == LOW) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(scale.get_units(), 2);
-    lcd.setCursor(10, 0);
-    lcd.print(" KN");
-    lcd.setCursor(0, 1);
-    newencoderValue = (double)encoderValue;
-    newencoderValue = (newencoderValue * 3000) - offset;
-   
-    lcd.print(newencoderValue, 3);
-    lcd.setCursor(10, 1);
-    lcd.print(" mm");
-    delay(500);
-  }
+  kn = scale.get_units(5) - offset2;  //taking average of 5 values
+  
+  //kn = map(kn, 24000,0,0,10);
+  //kn = kn /9.8; // already set using calibration factor no need to mulip for nwetons 21 kg show 9.8 ok
+  if (kn > max_kn)
+    max_kn = kn;
+
+  if (newencoderValue > newencoderValueMAX)
+    newencoderValueMAX = newencoderValue;
+
+  if (max_kn >= 6000 || newencoderValueMAX >= 650) digitalWrite(otp2, HIGH); // buzzer limit
   else {
-    long adc0, adc1, adc2, adc3;
-    adc0 = ads.readADC_SingleEnded(0);
-    adc0 = map(adc0, 0, 27000, 0, 4000);
-    //adc1 = ads.readADC_SingleEnded(1);
-    //adc1 = map(adc1, 0, 27000, 0, 4000);
-    //adc2 = ads.readADC_SingleEnded(2);
-    //adc2 = map(adc2, 0, 27000, 0, 4000);
-    //adc3 = ads.readADC_SingleEnded(3);
-    //adc3 = map(adc3, 0, 27000, 0, 4000);
-    wei = adc0;
-    wei = wei / 10;
+    digitalWrite(otp2, LOW);
+  }
+
+
+  if (!digitalRead(btn)) {
+    digitalWrite(otp, HIGH);
+
+    action = 0;
+  }
+
+
+
+  if (digitalRead(otp) == HIGH) {
+    if (action == 0 && (kn > 0.6)) {                   //                || newencoderValue > 0.05)) {
+      lastkn = 0;
+      action = 1;
+      action2 = 0;
+      action1 = 0;
+      timePassed2 = millis();
+      saveToSD = 1;
+    }
+    else if (action == 1 && (kn > 0.9)) {                 //          || newencoderValue > 0.05)) { // start load feature
+      if (action1 == 0) {
+        if (kn > lastkn) {
+          lastkn = kn;
+        }
+        else if (lastkn -  kn > 0.50) {  // yeild point back
+          lastkn2 = lastkn ;
+          action1 = 1;
+        }
+      }
+      if (action2 == 0) {
+        if (newencoderValue > lastnewencoderValue) {
+          lastnewencoderValue = newencoderValue;
+        }
+        else if (lastnewencoderValue - newencoderValue > 0.20) {
+          lastnewencoderValue2 = lastnewencoderValue;
+          action2 = 1;
+        }
+      }
+    }
+
+    if (action != 0 && kn < 0.20) {     // revese newton  auto off
+      digitalWrite(otp, LOW);
+
+    }
+
+  }
+
+  lcd.clear();
+
+  if (digitalRead(max_kn_button) == LOW) {
+    lcd.setCursor(0, 0);
+    lcd.print("BREAK LOAD");
+    lcd.setCursor(0, 2);
+    lcd.print("LOAD (N)  =");
+    lcd.setCursor(12, 2);
+    lcd.print(max_kn, 2);
+    lcd.setCursor(0, 3);
+    lcd.print("Disp.(mm) =");
+    lcd.setCursor(12, 3);
+    lcd.print(newencoderValueMAX, 2);
+
+  }
+
+  else if (digitalRead(btn2) == LOW) {
+    lcd.setCursor(0, 0);
+    lcd.print("YIELD LOAD");
+    lcd.setCursor(12, 2);
+    lcd.print(lastkn2, 2);
+    lcd.setCursor(0, 2);
+    lcd.print("LOAD (N)  =");
+    lcd.setCursor(12, 3);
+    lcd.print(lastnewencoderValue2, 2);
+    lcd.setCursor(0, 3);
+    lcd.print("Disp.(mm) =");
+  }
+
+  else {
+    lcd.setCursor(0, 0);
+    if (kn < 0) kn = 0;  // minus hx711 plus value show
+
+    lcd.setCursor(0, 0);
+    lcd.print("LOAD  (N) =");
+    lcd.setCursor(13, 0); // if (knAvg < 0) knAvg = 0;
+
+
+    lcd.print(kn, 1);
+
+    lcd.setCursor(0, 1);
+    lcd.print("Disp.(mm) =");
+    lcd.setCursor(13, 1);
+    lcd.print(newencoderValue, 2);
+  }
+
+  //void(* resetFunc) (void) = 0; //declare reset function @ address 0
+  if (digitalRead(Tare) == LOW) {
+    delay(150);
     lcd.clear();
     lcd.setCursor(0, 0);
-   // lcd.print(wei, 1);
-    lcd.setCursor(0, 0);
-    lcd.print(" EXTENSOMETER");
+    lcd.print("Tare ......");
     lcd.setCursor(0, 1);
-    newencoderValue = (double)encoderValue;
-    newencoderValue = (newencoderValue/660)- offset ;
-   
-    lcd.print(newencoderValue,3);
-    Serial.print(newencoderValue, 3);
-    lcd.setCursor(10, 1);
-    lcd.print(" mm");
-    Serial.print(" mm");
-    delay(100);
+    lcd.print("load & displacment..");
+    scale.tare();
+    offset2 = 0;
+
+    offset = newencoderValue;
+    delay(300);
   }
 
- 
-  void(* resetFunc) (void) = 0; //declare reset function @ address 0
- if (digitalRead(Tare) == LOW) {
-    delay(150);
-    resetFunc();
-  }
-
-  if (interval == w) {
-    if (digitalRead(mode_switch) == LOW) {
+  if (millis() - timePassed >= interval * 1000) {
+    if (digitalRead(otp) == HIGH && saveToSD == 1) {
+      if (millis() - timePassed2 >= 350000) {
+        saveToSD = 0;
+      }
       logger = SD.open("KN_log.txt", FILE_WRITE);
       if (logger) {
         logger.print(now.year(), DEC);
@@ -261,60 +286,65 @@ void loop()
         logger.print(':');
         logger.print(now.second(), DEC);
         logger.print(",");
-        logger.print(wei, 1);
+        logger.print(kn, 2);
+        logger.print(",");
+        logger.print(lastkn2, 2);
+        logger.print(",");
+        logger.print(max_kn, 2);
         logger.print(",");
         logger.print(newencoderValue, 2);
         logger.print(",");
-        logger.println("Mode 1");
+        logger.print(lastnewencoderValue2, 2);
+        logger.print(",");
+        logger.println(newencoderValueMAX, 2);
         logger.close(); // close the file
       }
-    }
-    else if (digitalRead(mode_switch) == HIGH) {
-      logger = SD.open("KN_log.txt", FILE_WRITE);
-      if (logger) {
-        logger.print(now.year(), DEC);
-        logger.print('/');
-        logger.print(now.month(), DEC);
-        logger.print('/');
-        logger.print(now.day(), DEC);
-        logger.print(",");
-        logger.print(now.hour(), DEC);
-        logger.print(':');
-        logger.print(now.minute(), DEC);
-        logger.print(':');
-        logger.print(now.second(), DEC);
-        logger.print(",");
-        logger.print(scale.get_units(), 2);
-        logger.print(",");
-        logger.print(newencoderValue, 2);
-        logger.print(",");
-        logger.println("Mode 2");
-        logger.close(); // close the file
+      else {
+        Serial.println("error opening KN_log.txt");
       }
     }
+    Serial.print(now.year(), DEC);
+    Serial.print('/');
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print(",");
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.print(",");
+    Serial.print(kn, 2);
+    Serial.print(",");
+    Serial.print(lastkn2, 2);
+    Serial.print(",");
+    Serial.print(max_kn, 2);
+    Serial.print(",");
+    Serial.print(newencoderValue, 2);
+    Serial.print(",");
+    Serial.print(lastnewencoderValue2, 2);
+    Serial.print(",");
+    Serial.println(newencoderValueMAX, 2);
+    timePassed = millis();
+
+
+
     // if the file didn't open, print an error:
-    else {
-      Serial.println("error opening KN_log.txt");
-    }
-    w = 0;
+
   }
-  else if (w < interval) {
-    w++;
-  }
+
 }
 
-
-
-void updateEncoder(){
+void updateEncoder() {
   int MSB = digitalRead(encoderPin1); //MSB = most significant bit
-  int LSB = digitalRead(encoderPin2); //LSB = least significant bit
+  int LSB = digitalRead(encoderPin2); //LSB = least significant bitS
 
-  int encoded = (MSB << 1) |LSB; //converting the 2 pin value to single number
+  int encoded = (MSB << 1) | LSB; //converting the 2 pin value to single number
   int sum  = (lastEncoded << 2) | encoded; //adding it to the previous encoded value
 
-  if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) encoderValue ++;
-  if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) encoderValue --;
+  if (sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) encoderValue++;
+  if (sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) encoderValue--;
 
   lastEncoded = encoded; //store this value for next time
 }
-

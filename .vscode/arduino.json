@@ -1,0 +1,6 @@
+{
+    "board": "arduino:avr:mega",
+    "configuration": "cpu=atmega2560",
+    "output": "../build",
+    "sketch": "kn_logger_encoder/kn_logger_encoder.ino"
+}
